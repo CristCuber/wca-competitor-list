@@ -71,7 +71,7 @@ func main() {
 			wcaIdForBadge = "First-timer"
 		}
 
-		regisRow := []string{CompIdString, person.PersonName, person.ConrtyISO2, person.Birthdate, ""}
+		regisRow := []string{CompIdString, person.PersonName, person.ConrtyISO2, person.WCAID, person.Birthdate, ""}
 		regisArray = append(regisArray, regisRow)
 
 		badgeRow := []string{CompIdString, personNameWithoutLocal[0], wcaIdForBadge}
