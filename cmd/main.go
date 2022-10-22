@@ -56,15 +56,16 @@ func main() {
 	defer certificateListFile.Close()
 	wPartiCert := csv.NewWriter(certificateListFile)
 
-	regisArray := [][]string{{"ID", "Name", "Country", "WCA ID", "Birth Date", "Remark"}}
-	badgeArray := [][]string{{"ID", "Name", "WCA ID"}}
-	certArray := [][]string{{"Name"}}
+	regisArray := [][]string{{"ID", "Name Surname", "Country", "WCA ID", "Birth Date", "Remark"}}
+	badgeArray := [][]string{{"ID", "Name", "Surname", "WCA ID"}}
+	certArray := [][]string{{"Name Surname"}}
 	for _, person := range Competition.Persons {
 		if person.Registration.Status != "accepted" {
 			continue
 		}
 
 		personNameWithoutLocal := strings.Split(person.PersonName, " (")
+		personNameForBadge := strings.SplitN(personNameWithoutLocal[0], " ", 2)
 		CompIdString := strconv.Itoa(person.RegistrationID)
 		wcaIdForBadge := person.WCAID
 		if wcaIdForBadge == "" {
@@ -74,7 +75,7 @@ func main() {
 		regisRow := []string{CompIdString, person.PersonName, person.ConrtyISO2, person.WCAID, person.Birthdate, ""}
 		regisArray = append(regisArray, regisRow)
 
-		badgeRow := []string{CompIdString, personNameWithoutLocal[0], wcaIdForBadge}
+		badgeRow := []string{CompIdString, personNameForBadge[0], personNameForBadge[1], wcaIdForBadge}
 		badgeArray = append(badgeArray, badgeRow)
 
 		certRow := []string{personNameWithoutLocal[0]}
