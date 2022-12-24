@@ -12,6 +12,8 @@ import (
 )
 
 func main() {
+	// wcif url: "https://www.worldcubeassociation.org/api/v0/competitions/YourCompetition2022/wcif"
+
 	wcif, err := os.Open("./file/wcif.json")
 	if err != nil {
 		fmt.Printf("error when read wcif file due to: %v\n", err)
@@ -56,9 +58,9 @@ func main() {
 	defer certificateListFile.Close()
 	wPartiCert := csv.NewWriter(certificateListFile)
 
-	regisArray := [][]string{{"ID", "Name Surname", "Country", "WCA ID", "Birth Date", "Remark"}}
+	regisArray := [][]string{{"ID", "Name", "Country", "WCA ID", "Birth Date", "Remark"}}
 	badgeArray := [][]string{{"ID", "Name", "Surname", "WCA ID"}}
-	certArray := [][]string{{"Name Surname"}}
+	certArray := [][]string{{"Name"}}
 	for _, person := range Competition.Persons {
 		if person.Registration.Status != "accepted" {
 			continue
@@ -66,6 +68,14 @@ func main() {
 
 		personNameWithoutLocal := strings.Split(person.PersonName, " (")
 		personNameForBadge := strings.SplitN(personNameWithoutLocal[0], " ", 2)
+		if len(personNameForBadge) != 2 {
+			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No surname")
+			break
+		} else if strings.Contains(personNameForBadge[1], "(") {
+			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No space between English and local")
+			break
+		}
+
 		CompIdString := strconv.Itoa(person.RegistrationID)
 		wcaIdForBadge := person.WCAID
 		if wcaIdForBadge == "" {
