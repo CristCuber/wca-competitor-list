@@ -33,16 +33,24 @@ func main() {
 		return Competition.Persons[i].PersonName < Competition.Persons[j].PersonName
 	})
 
-	registrationDeskFileName := Competition.ID + "-registration-desk.csv"
+	registrationDeskFirstTimerFileName := Competition.ID + "-registration-desk-first-timer.csv"
+	registrationDeskReturnerFileName := Competition.ID + "-registration-desk-returner.csv"
 	badgeListFileName := Competition.ID + "-badge-list.csv"
 	certificateListFileName := Competition.ID + "-participants-certificate-list.csv"
 
-	registrationDeskFile, err := os.Create("./file/" + registrationDeskFileName)
+	registrationDeskFirstTimerFile, err := os.Create("./file/" + registrationDeskFirstTimerFileName)
 	if err != nil {
 		fmt.Printf("error when create registration desk file due to: %v", err)
 	}
-	defer registrationDeskFile.Close()
-	wRegis := csv.NewWriter(registrationDeskFile)
+	defer registrationDeskFirstTimerFile.Close()
+	wfRegis := csv.NewWriter(registrationDeskFirstTimerFile)
+
+	registrationDeskReturnerFile, err := os.Create("./file/" + registrationDeskReturnerFileName)
+	if err != nil {
+		fmt.Printf("error when create registration desk file due to: %v", err)
+	}
+	defer registrationDeskReturnerFile.Close()
+	wrRegis := csv.NewWriter(registrationDeskReturnerFile)
 
 	badgeListFile, err := os.Create("./file/" + badgeListFileName)
 	if err != nil {
@@ -58,7 +66,8 @@ func main() {
 	defer certificateListFile.Close()
 	wPartiCert := csv.NewWriter(certificateListFile)
 
-	regisArray := [][]string{{"ID", "Name", "Country", "WCA ID", "Birth Date", "Remark"}}
+	regisFirstTimerArray := [][]string{{"ID", "Name", "Country", "WCA ID", "Birth Date", "Remark"}}
+	regisReturnerArray := [][]string{{"ID", "Name", "Country", "WCA ID", "Birth Date", "Remark"}}
 	badgeArray := [][]string{{"ID", "Name", "Surname", "WCA ID"}}
 	certArray := [][]string{{"Name"}}
 	for _, person := range Competition.Persons {
@@ -83,7 +92,11 @@ func main() {
 		}
 
 		regisRow := []string{CompIdString, person.PersonName, person.ConrtyISO2, person.WCAID, person.Birthdate, ""}
-		regisArray = append(regisArray, regisRow)
+		if person.WCAID == "" {
+			regisFirstTimerArray = append(regisFirstTimerArray, regisRow)
+		} else {
+			regisReturnerArray = append(regisReturnerArray, regisRow)
+		}
 
 		badgeRow := []string{CompIdString, personNameForBadge[0], personNameForBadge[1], wcaIdForBadge}
 		badgeArray = append(badgeArray, badgeRow)
@@ -92,7 +105,8 @@ func main() {
 		certArray = append(certArray, certRow)
 	}
 
-	wRegis.WriteAll(regisArray)
+	wfRegis.WriteAll(regisFirstTimerArray)
+	wrRegis.WriteAll(regisReturnerArray)
 	wBadge.WriteAll(badgeArray)
 	wPartiCert.WriteAll(certArray)
 }
