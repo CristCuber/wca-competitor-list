@@ -66,8 +66,8 @@ func main() {
 	defer certificateListFile.Close()
 	wPartiCert := csv.NewWriter(certificateListFile)
 
-	regisFirstTimerArray := [][]string{{"ID", "Name", "Country", "WCA ID", "Birth Date", "Remark"}}
-	regisReturnerArray := [][]string{{"ID", "Name", "Country", "WCA ID", "Birth Date", "Remark"}}
+	regisFirstTimerArray := [][]string{{"ID", "Name", "Name-Checked", "Country", "WCA ID", "Birth Date", "BirthDate-Checked", "Remark"}}
+	regisReturnerArray := [][]string{{"ID", "Name", "Name-Checked", "Country", "WCA ID", "Birth Date", "BirthDate-Checked", "Remark"}}
 	badgeArray := [][]string{{"ID", "Name", "Surname", "WCA ID"}}
 	certArray := [][]string{{"Name"}}
 	for _, person := range Competition.Persons {
