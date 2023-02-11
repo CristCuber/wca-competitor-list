@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 func main() {
@@ -75,14 +76,18 @@ func main() {
 			continue
 		}
 
+		hasSurname := true
 		personNameWithoutLocal := strings.Split(person.PersonName, " (")
 		personNameForBadge := strings.SplitN(personNameWithoutLocal[0], " ", 2)
 		if len(personNameForBadge) != 2 {
 			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No surname")
-			break
+			hasSurname = false
 		} else if strings.Contains(personNameForBadge[1], "(") {
 			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No space between English and local")
-			break
+		} else if strings.Contains(person.PersonName, "  ") {
+			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". there are double space in their name")
+		} else if !validateCapitalization(personNameWithoutLocal[0]) {
+			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". Name is not in correct format")
 		}
 
 		CompIdString := strconv.Itoa(person.RegistrationID)
@@ -91,14 +96,20 @@ func main() {
 			wcaIdForBadge = "First-timer"
 		}
 
-		regisRow := []string{CompIdString, person.PersonName, person.ConrtyISO2, person.WCAID, person.Birthdate, ""}
+		regisRow := []string{CompIdString, person.PersonName, "", person.ConrtyISO2, person.WCAID, person.Birthdate, "", ""}
 		if person.WCAID == "" {
 			regisFirstTimerArray = append(regisFirstTimerArray, regisRow)
 		} else {
 			regisReturnerArray = append(regisReturnerArray, regisRow)
 		}
 
-		badgeRow := []string{CompIdString, personNameForBadge[0], personNameForBadge[1], wcaIdForBadge}
+		badgeRow := []string{}
+		if hasSurname {
+			badgeRow = []string{CompIdString, personNameForBadge[0], personNameForBadge[1], wcaIdForBadge}
+		} else {
+			badgeRow = []string{CompIdString, personNameForBadge[0], "", wcaIdForBadge}
+		}
+
 		badgeArray = append(badgeArray, badgeRow)
 
 		certRow := []string{personNameWithoutLocal[0]}
@@ -109,6 +120,16 @@ func main() {
 	wrRegis.WriteAll(regisReturnerArray)
 	wBadge.WriteAll(badgeArray)
 	wPartiCert.WriteAll(certArray)
+}
+
+func validateCapitalization(fullname string) bool {
+	words := strings.Fields(fullname)
+	for _, word := range words {
+		if !unicode.IsUpper(rune(word[0])) {
+			return false
+		}
+	}
+	return true
 }
 
 type WCACompetition struct {
