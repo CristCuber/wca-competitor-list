@@ -81,8 +81,8 @@ func (g *Gen) GenerateNameList() error {
 	defer certificateListFile.Close()
 	wPartiCert := csv.NewWriter(certificateListFile)
 
-	regisFirstTimerArray := [][]string{{"ID", "Name", "Name-Checked", "Country", "WCA ID", "Birth Date", "BirthDate-Checked", "Remark"}}
-	regisReturnerArray := [][]string{{"ID", "Name", "Name-Checked", "Country", "WCA ID", "Birth Date", "BirthDate-Checked", "Remark"}}
+	regisFirstTimerArray := [][]string{{"ID", "WCA ID", "Name", "Name-Checked", "Birth Date", "BirthDate-Checked", "Country", "Remark"}}
+	regisReturnerArray := [][]string{{"ID", "WCA ID", "Name", "Name-Checked", "Birth Date", "BirthDate-Checked", "Country", "Remark"}}
 	badgeArray := [][]string{{"ID", "Name", "Surname", "WCA ID"}}
 	certArray := [][]string{{"Name"}}
 	for _, person := range Competition.Persons {
@@ -110,7 +110,7 @@ func (g *Gen) GenerateNameList() error {
 			wcaIdForBadge = "First-timer"
 		}
 
-		regisRow := []string{CompIdString, person.PersonName, "", person.ConrtyISO2, person.WCAID, person.Birthdate, "", ""}
+		regisRow := []string{CompIdString, person.WCAID, person.PersonName, "", person.Birthdate, "", person.ConrtyISO2, ""}
 		if person.WCAID == "" {
 			regisFirstTimerArray = append(regisFirstTimerArray, regisRow)
 		} else {
