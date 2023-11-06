@@ -36,6 +36,7 @@ type Registration struct {
 	Status            string   `json:"status"`
 	Guests            int      `json:"guests"`
 	Comments          string   `json:"comments"`
+	AdminNote         string   `json:"administrativeNotes"`
 }
 
 type PersonalBest struct {

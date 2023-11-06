@@ -47,6 +47,7 @@ func (g *Gen) GenerateNameList() error {
 
 	registrationDeskFirstTimerFileName := Competition.ID + "-registration-desk-first-timer.csv"
 	registrationDeskReturnerFileName := Competition.ID + "-registration-desk-returner.csv"
+	registrationDeskIncorrectFormatFileName := Competition.ID + "-registration-desk-incorrect.csv"
 	badgeListFileName := Competition.ID + "-badge-list.csv"
 	certificateListFileName := Competition.ID + "-participants-certificate-list.csv"
 
@@ -64,6 +65,14 @@ func (g *Gen) GenerateNameList() error {
 	}
 	defer registrationDeskReturnerFile.Close()
 	wrRegis := csv.NewWriter(registrationDeskReturnerFile)
+
+	registrationDeskIncorrectFile, err := os.Create("./generater/file/" + registrationDeskIncorrectFormatFileName)
+	if err != nil {
+		fmt.Printf("error when create registration desk file due to: %v", err)
+		return err
+	}
+	defer registrationDeskReturnerFile.Close()
+	wiRegis := csv.NewWriter(registrationDeskIncorrectFile)
 
 	badgeListFile, err := os.Create("./generater/file/" + badgeListFileName)
 	if err != nil {
@@ -83,6 +92,7 @@ func (g *Gen) GenerateNameList() error {
 
 	regisFirstTimerArray := [][]string{{"ID", "WCA ID", "Name", "Name-Checked", "Birth Date", "BirthDate-Checked", "Country", "Remark"}}
 	regisReturnerArray := [][]string{{"ID", "WCA ID", "Name", "Name-Checked", "Birth Date", "BirthDate-Checked", "Country", "Remark"}}
+	regisIncorrectFormatArray := [][]string{{"ID", "WCA ID", "Name", "Name-Checked", "Birth Date", "BirthDate-Checked", "Country", "Remark"}}
 	badgeArray := [][]string{{"ID", "Name", "Surname", "WCA ID"}}
 	certArray := [][]string{{"Name"}}
 	for _, person := range Competition.Persons {
@@ -110,10 +120,14 @@ func (g *Gen) GenerateNameList() error {
 			wcaIdForBadge = "First-timer"
 		}
 
-		regisRow := []string{CompIdString, person.WCAID, person.PersonName, "", person.Birthdate, "", person.ConrtyISO2, ""}
-		if person.WCAID == "" {
+		if person.Registration.AdminNote == "incorrectName" {
+			regisRow := []string{CompIdString, person.WCAID, person.PersonName, "", person.Birthdate, "", person.ConrtyISO2, "*** Please confirm your full name in English to a staff ***"}
+			regisIncorrectFormatArray = append(regisIncorrectFormatArray, regisRow)
+		} else if person.WCAID == "" {
+			regisRow := []string{CompIdString, "First-timer", person.PersonName, "", person.Birthdate, "", person.ConrtyISO2, ""}
 			regisFirstTimerArray = append(regisFirstTimerArray, regisRow)
 		} else {
+			regisRow := []string{CompIdString, person.WCAID, person.PersonName, "", person.Birthdate, "", person.ConrtyISO2, ""}
 			regisReturnerArray = append(regisReturnerArray, regisRow)
 		}
 
@@ -132,6 +146,7 @@ func (g *Gen) GenerateNameList() error {
 
 	wfRegis.WriteAll(regisFirstTimerArray)
 	wrRegis.WriteAll(regisReturnerArray)
+	wiRegis.WriteAll(regisIncorrectFormatArray)
 	wBadge.WriteAll(badgeArray)
 	wPartiCert.WriteAll(certArray)
 
