@@ -25,6 +25,8 @@ func NewGenerater() *Gen {
 func (g *Gen) GenerateNameList() error {
 	// wcif url: "https://www.worldcubeassociation.org/api/v0/competitions/YourCompetition2022/wcif"
 
+	defaultSurname := "XXXXXXXXXX"
+
 	wcif, err := os.Open("./generater/file/wcif.json")
 	if err != nil {
 		fmt.Printf("error when read wcif file due to: %v\n", err)
@@ -95,23 +97,31 @@ func (g *Gen) GenerateNameList() error {
 	regisIncorrectFormatArray := [][]string{{"ID", "WCA ID", "Name", "Name-Checked", "Birth Date", "BirthDate-Checked", "Country", "Remark"}}
 	badgeArray := [][]string{{"ID", "Name", "Surname", "WCA ID"}}
 	certArray := [][]string{{"Name"}}
+
 	for _, person := range Competition.Persons {
 		if person.Registration.Status != "accepted" {
 			continue
 		}
 
 		hasSurname := true
+		isIncorrectName := false
+
 		personNameWithoutLocal := strings.Split(person.PersonName, " (")
 		personNameForBadge := strings.SplitN(personNameWithoutLocal[0], " ", 2)
+
 		if len(personNameForBadge) != 2 {
 			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No surname")
 			hasSurname = false
+			isIncorrectName = true
 		} else if strings.Contains(personNameForBadge[1], "(") {
 			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No space between English and local")
 		} else if strings.Contains(person.PersonName, "  ") {
 			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". there are double space in their name")
 		} else if !validateCapitalization(personNameWithoutLocal[0]) {
 			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". Name is not in correct format")
+		} else if isLetter(person.PersonName) {
+			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No English name")
+			isIncorrectName = true
 		}
 
 		CompIdString := strconv.Itoa(person.RegistrationID)
@@ -120,8 +130,13 @@ func (g *Gen) GenerateNameList() error {
 			wcaIdForBadge = "First-timer"
 		}
 
-		if person.Registration.AdminNote == "incorrectName" {
-			regisRow := []string{CompIdString, person.WCAID, person.PersonName, "", person.Birthdate, "", person.ConrtyISO2, "*** Please confirm your full name in English to a staff ***"}
+		if isIncorrectName {
+			name := person.PersonName
+			if !hasSurname {
+				name = name + defaultSurname
+			}
+
+			regisRow := []string{CompIdString, person.WCAID, name, "", person.Birthdate, "", person.ConrtyISO2, "*** Please confirm your full name in English to a staff ***"}
 			regisIncorrectFormatArray = append(regisIncorrectFormatArray, regisRow)
 		} else if person.WCAID == "" {
 			regisRow := []string{CompIdString, "First-timer", person.PersonName, "", person.Birthdate, "", person.ConrtyISO2, ""}
@@ -135,7 +150,7 @@ func (g *Gen) GenerateNameList() error {
 		if hasSurname {
 			badgeRow = []string{CompIdString, personNameForBadge[0], personNameForBadge[1], wcaIdForBadge}
 		} else {
-			badgeRow = []string{CompIdString, personNameForBadge[0], "", wcaIdForBadge}
+			badgeRow = []string{CompIdString, personNameForBadge[0], defaultSurname, wcaIdForBadge}
 		}
 
 		badgeArray = append(badgeArray, badgeRow)
@@ -157,6 +172,15 @@ func validateCapitalization(fullname string) bool {
 	words := strings.Fields(fullname)
 	for _, word := range words {
 		if !unicode.IsUpper(rune(word[0])) {
+			return false
+		}
+	}
+	return true
+}
+
+func isLetter(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLetter(r) {
 			return false
 		}
 	}
