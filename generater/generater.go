@@ -92,9 +92,9 @@ func (g *Gen) GenerateNameList() error {
 	defer certificateListFile.Close()
 	wPartiCert := csv.NewWriter(certificateListFile)
 
-	regisFirstTimerArray := [][]string{{"ID", "WCA ID", "Name", "Name-Checked", "Birth Date", "BirthDate-Checked", "Country", "Remark"}}
-	regisReturnerArray := [][]string{{"ID", "WCA ID", "Name", "Name-Checked", "Birth Date", "BirthDate-Checked", "Country", "Remark"}}
-	regisIncorrectFormatArray := [][]string{{"ID", "WCA ID", "Name", "Name-Checked", "Birth Date", "BirthDate-Checked", "Country", "Remark"}}
+	regisFirstTimerArray := [][]string{{"ID", "WCA ID", "Name", "Gender", "Country", "Sign", "Remark"}}
+	regisReturnerArray := [][]string{{"ID", "WCA ID", "Name", "Gender", "Country", "Sign", "Remark"}}
+	regisIncorrectFormatArray := [][]string{{"ID", "WCA ID", "Name", "Gender", "Country", "Sign", "Remark"}}
 	badgeArray := [][]string{{"ID", "Name", "Surname", "WCA ID"}}
 	certArray := [][]string{{"Name"}}
 
@@ -105,9 +105,16 @@ func (g *Gen) GenerateNameList() error {
 
 		hasSurname := true
 		isIncorrectName := false
+		gender := "other"
 
 		personNameWithoutLocal := strings.Split(person.PersonName, " (")
 		personNameForBadge := strings.SplitN(personNameWithoutLocal[0], " ", 2)
+
+		if person.Gender == "m" {
+			gender = "Male"
+		} else if person.Gender == "f" {
+			gender = "Female"
+		}
 
 		if len(personNameForBadge) != 2 {
 			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No surname")
@@ -124,6 +131,10 @@ func (g *Gen) GenerateNameList() error {
 			isIncorrectName = true
 		}
 
+		if strings.HasPrefix(person.Registration.AdminNote, "***") {
+			isIncorrectName = true
+		}
+
 		CompIdString := strconv.Itoa(person.RegistrationID)
 		wcaIdForBadge := person.WCAID
 		if wcaIdForBadge == "" {
@@ -136,13 +147,13 @@ func (g *Gen) GenerateNameList() error {
 				name = name + defaultSurname
 			}
 
-			regisRow := []string{CompIdString, person.WCAID, name, "", person.Birthdate, "", person.ConrtyISO2, "*** Please confirm your full name in English to a staff ***"}
+			regisRow := []string{CompIdString, person.WCAID, name, gender, person.ConrtyISO2, "", "Please confirm your full name in English"}
 			regisIncorrectFormatArray = append(regisIncorrectFormatArray, regisRow)
 		} else if person.WCAID == "" {
-			regisRow := []string{CompIdString, "First-timer", person.PersonName, "", person.Birthdate, "", person.ConrtyISO2, ""}
+			regisRow := []string{CompIdString, "", person.PersonName, gender, person.ConrtyISO2, "", person.Registration.AdminNote}
 			regisFirstTimerArray = append(regisFirstTimerArray, regisRow)
 		} else {
-			regisRow := []string{CompIdString, person.WCAID, person.PersonName, "", person.Birthdate, "", person.ConrtyISO2, ""}
+			regisRow := []string{CompIdString, person.WCAID, person.PersonName, gender, person.ConrtyISO2, "", ""}
 			regisReturnerArray = append(regisReturnerArray, regisRow)
 		}
 
