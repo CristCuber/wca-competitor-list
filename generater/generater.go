@@ -4,7 +4,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -35,7 +35,7 @@ func (g *Gen) GenerateNameList() error {
 
 	defer wcif.Close()
 
-	byteValue, _ := ioutil.ReadAll(wcif)
+	byteValue, _ := io.ReadAll(wcif)
 
 	var Competition WCACompetition
 
