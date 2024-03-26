@@ -1,10 +1,12 @@
 package generater
 
 import (
+	"bufio"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -23,23 +25,33 @@ func NewGenerater() *Gen {
 }
 
 func (g *Gen) GenerateNameList() error {
-	// wcif url: "https://www.worldcubeassociation.org/api/v0/competitions/YourCompetition2022/wcif"
-
 	defaultSurname := "XXXXXXXXXX"
+	wcifURL := "https://www.worldcubeassociation.org/api/v0/competitions/{competitionID}/wcif/public"
 
-	wcif, err := os.Open("./generater/file/wcif.json")
+	scanner := bufio.NewScanner(os.Stdin)
+
+	fmt.Printf("Enter competition id:")
+	scanner.Scan()
+	input := scanner.Text()
+
+	thisCompURL := strings.Replace(wcifURL, "{competitionID}", input, -1)
+
+	resp, err := http.Get(thisCompURL)
 	if err != nil {
-		fmt.Printf("error when read wcif file due to: %v\n", err)
+		fmt.Printf("error when call wcif: %v\n", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	wcifByte, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("error when read body: %v\n", err)
 		return err
 	}
 
-	defer wcif.Close()
-
-	byteValue, _ := io.ReadAll(wcif)
-
 	var Competition WCACompetition
 
-	json.Unmarshal(byteValue, &Competition)
+	json.Unmarshal(wcifByte, &Competition)
 
 	fmt.Println("this competition is " + Competition.ID)
 
@@ -51,14 +63,14 @@ func (g *Gen) GenerateNameList() error {
 	registrationDeskReturnerFileName := Competition.ID + "-registration-desk-returner.csv"
 	registrationDeskIncorrectFormatFileName := Competition.ID + "-registration-desk-incorrect.csv"
 
-	registrationDeskFirstTimerFile, err := os.Create("./generater/file/" + registrationDeskFirstTimerFileName)
+	registrationDeskFirstTimerFile, err := os.Create(registrationDeskFirstTimerFileName)
 	if err != nil {
 		fmt.Printf("error when create registration desk file due to: %v", err)
 	}
 	defer registrationDeskFirstTimerFile.Close()
 	wfRegis := csv.NewWriter(registrationDeskFirstTimerFile)
 
-	registrationDeskReturnerFile, err := os.Create("./generater/file/" + registrationDeskReturnerFileName)
+	registrationDeskReturnerFile, err := os.Create(registrationDeskReturnerFileName)
 	if err != nil {
 		fmt.Printf("error when create registration desk file due to: %v", err)
 		return err
@@ -66,7 +78,7 @@ func (g *Gen) GenerateNameList() error {
 	defer registrationDeskReturnerFile.Close()
 	wrRegis := csv.NewWriter(registrationDeskReturnerFile)
 
-	registrationDeskIncorrectFile, err := os.Create("./generater/file/" + registrationDeskIncorrectFormatFileName)
+	registrationDeskIncorrectFile, err := os.Create(registrationDeskIncorrectFormatFileName)
 	if err != nil {
 		fmt.Printf("error when create registration desk file due to: %v", err)
 		return err
