@@ -184,6 +184,11 @@ func isLetter(s string) bool {
 
 func printPDF(pdf *gofpdf.Fpdf, columns []string, columnWidth []float64, data [][]string, filename string) error {
 	herder := func() {
+		pdf.SetY(10)
+		pdf.SetFont("Arial", "", 7)
+		pdf.Cell(0, 10, filename)
+		pdf.Ln(12)
+
 		pdf.SetFont("Arial", "B", 10)
 		pdf.SetFillColor(189, 189, 189)
 		for i, colText := range columns {
@@ -192,8 +197,14 @@ func printPDF(pdf *gofpdf.Fpdf, columns []string, columnWidth []float64, data []
 		pdf.Ln(-1)
 	}
 
+	footer := func() {
+		pdf.SetY(-15)
+		pdf.CellFormat(0, 10, "Page "+strconv.Itoa(pdf.PageNo()), "", 0, "R", false, 0, "")
+	}
+
 	pdf.SetHeaderFunc(herder)
 	pdf.AddPage()
+	pdf.SetFooterFunc(footer)
 
 	prevFirstLetter := ""
 	fillColor := true
