@@ -2,7 +2,6 @@ package generater
 
 import (
 	"bufio"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/jung-kurt/gofpdf"
 )
 
 type Gen struct{}
@@ -25,6 +26,19 @@ func NewGenerater() *Gen {
 }
 
 func (g *Gen) GenerateNameList() error {
+	fontSize := 9.0
+	columns := []string{"ID", "WCA ID", "Name", "Gender", "Country", "Sign", "Remark"}
+	columnWidth := []float64{10.0, 25.0, 65.0, 15.0, 15.0, 15.0, 45.0}
+
+	pdfFirstTimer := gofpdf.New("P", "mm", "A4", "")
+	pdfFirstTimer.SetFont("Arial", "", fontSize)
+
+	pdfReturner := gofpdf.New("P", "mm", "A4", "")
+	pdfReturner.SetFont("Arial", "", fontSize)
+
+	pdfIncorrect := gofpdf.New("P", "mm", "A4", "")
+	pdfIncorrect.SetFont("Arial", "", fontSize)
+
 	defaultSurname := "XXXXXXXXXX"
 	wcifURL := "https://www.worldcubeassociation.org/api/v0/competitions/{competitionID}/wcif/public"
 
@@ -59,36 +73,13 @@ func (g *Gen) GenerateNameList() error {
 		return Competition.Persons[i].PersonName < Competition.Persons[j].PersonName
 	})
 
-	registrationDeskFirstTimerFileName := Competition.ID + "-registration-desk-first-timer.csv"
-	registrationDeskReturnerFileName := Competition.ID + "-registration-desk-returner.csv"
-	registrationDeskIncorrectFormatFileName := Competition.ID + "-registration-desk-incorrect.csv"
+	registrationDeskFirstTimerFileName := Competition.ID + "-registration-desk-first-timer.pdf"
+	registrationDeskReturnerFileName := Competition.ID + "-registration-desk-returner.pdf"
+	registrationDeskIncorrectFormatFileName := Competition.ID + "-registration-desk-incorrect.pdf"
 
-	registrationDeskFirstTimerFile, err := os.Create(registrationDeskFirstTimerFileName)
-	if err != nil {
-		fmt.Printf("error when create registration desk file due to: %v", err)
-	}
-	defer registrationDeskFirstTimerFile.Close()
-	wfRegis := csv.NewWriter(registrationDeskFirstTimerFile)
-
-	registrationDeskReturnerFile, err := os.Create(registrationDeskReturnerFileName)
-	if err != nil {
-		fmt.Printf("error when create registration desk file due to: %v", err)
-		return err
-	}
-	defer registrationDeskReturnerFile.Close()
-	wrRegis := csv.NewWriter(registrationDeskReturnerFile)
-
-	registrationDeskIncorrectFile, err := os.Create(registrationDeskIncorrectFormatFileName)
-	if err != nil {
-		fmt.Printf("error when create registration desk file due to: %v", err)
-		return err
-	}
-	defer registrationDeskReturnerFile.Close()
-	wiRegis := csv.NewWriter(registrationDeskIncorrectFile)
-
-	regisFirstTimerArray := [][]string{{"ID", "WCA ID", "Name", "Gender", "Country", "Sign", "Remark"}}
-	regisReturnerArray := [][]string{{"ID", "WCA ID", "Name", "Gender", "Country", "Sign", "Remark"}}
-	regisIncorrectFormatArray := [][]string{{"ID", "WCA ID", "Name", "Gender", "Country", "Sign", "Remark"}}
+	regisFirstTimerArray := [][]string{}
+	regisReturnerArray := [][]string{}
+	regisIncorrectFormatArray := [][]string{}
 
 	for _, person := range Competition.Persons {
 		if person.Registration.Status != "accepted" {
@@ -100,7 +91,7 @@ func (g *Gen) GenerateNameList() error {
 		gender := "other"
 
 		personNameWithoutLocal := strings.Split(person.PersonName, " (")
-		personNameForBadge := strings.SplitN(personNameWithoutLocal[0], " ", 2)
+		personNameWithoutLocalArray := strings.SplitN(personNameWithoutLocal[0], " ", 2)
 
 		if person.Gender == "m" {
 			gender = "Male"
@@ -108,48 +99,66 @@ func (g *Gen) GenerateNameList() error {
 			gender = "Female"
 		}
 
-		if len(personNameForBadge) != 2 {
+		note := ""
+
+		if len(personNameWithoutLocalArray) != 2 {
+			note = "No surname"
 			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No surname")
 			hasSurname = false
 			isIncorrectName = true
-		} else if strings.Contains(personNameForBadge[1], "(") {
+		} else if strings.Contains(personNameWithoutLocalArray[1], "(") {
+			note = "No space"
 			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No space between English and local")
-		} else if strings.Contains(person.PersonName, "  ") {
-			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". there are double space in their name")
-		} else if !validateCapitalization(personNameWithoutLocal[0]) {
-			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". Name is not in correct format")
-		} else if isLetter(person.PersonName) {
-			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No English name")
 			isIncorrectName = true
-		}
-
-		if strings.HasPrefix(person.Registration.AdminNote, "***") {
+		} else if strings.Contains(person.PersonName, "  ") {
+			note = "Have double space"
+			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". There are double space in their name")
+			isIncorrectName = true
+		} else if !validateCapitalization(personNameWithoutLocal[0]) {
+			note = "Incorrect format"
+			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". Name is not in correct format")
+			isIncorrectName = true
+		} else if isLetter(person.PersonName) {
+			note = "No English"
+			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No English name")
 			isIncorrectName = true
 		}
 
 		CompIdString := strconv.Itoa(person.RegistrationID)
 
 		if isIncorrectName {
-			name := person.PersonName
+			name := personNameWithoutLocal[0]
 			if !hasSurname {
 				name = name + defaultSurname
 			}
 
-			regisRow := []string{CompIdString, person.WCAID, name, gender, person.ConrtyISO2, "", "Please confirm your full name in English"}
+			regisRow := []string{CompIdString, person.WCAID, name, gender, person.ConrtyISO2, "", note}
 			regisIncorrectFormatArray = append(regisIncorrectFormatArray, regisRow)
 		} else if person.WCAID == "" {
-			regisRow := []string{CompIdString, "", person.PersonName, gender, person.ConrtyISO2, "", person.Registration.AdminNote}
+			regisRow := []string{CompIdString, "", personNameWithoutLocal[0], gender, person.ConrtyISO2, "", person.Registration.AdminNote}
 			regisFirstTimerArray = append(regisFirstTimerArray, regisRow)
 		} else {
-			regisRow := []string{CompIdString, person.WCAID, person.PersonName, gender, person.ConrtyISO2, "", ""}
+			regisRow := []string{CompIdString, person.WCAID, personNameWithoutLocal[0], gender, person.ConrtyISO2, "", ""}
 			regisReturnerArray = append(regisReturnerArray, regisRow)
 		}
 
 	}
 
-	wfRegis.WriteAll(regisFirstTimerArray)
-	wrRegis.WriteAll(regisReturnerArray)
-	wiRegis.WriteAll(regisIncorrectFormatArray)
+	err = printPDF(pdfFirstTimer, columns, columnWidth, regisFirstTimerArray, registrationDeskFirstTimerFileName)
+	if err != nil {
+		fmt.Printf("error print first timer file: %v\n", err)
+		return err
+	}
+	err = printPDF(pdfReturner, columns, columnWidth, regisReturnerArray, registrationDeskReturnerFileName)
+	if err != nil {
+		fmt.Printf("error print first timer file: %v\n", err)
+		return err
+	}
+	err = printPDF(pdfIncorrect, columns, columnWidth, regisIncorrectFormatArray, registrationDeskIncorrectFormatFileName)
+	if err != nil {
+		fmt.Printf("error print first timer file: %v\n", err)
+		return err
+	}
 
 	return nil
 }
@@ -171,4 +180,51 @@ func isLetter(s string) bool {
 		}
 	}
 	return true
+}
+
+func printPDF(pdf *gofpdf.Fpdf, columns []string, columnWidth []float64, data [][]string, filename string) error {
+	herder := func() {
+		pdf.SetFont("Arial", "B", 10)
+		pdf.SetFillColor(189, 189, 189)
+		for i, colText := range columns {
+			pdf.CellFormat(columnWidth[i], 10, colText, "1", 0, "C", true, 0, "")
+		}
+		pdf.Ln(-1)
+	}
+
+	pdf.SetHeaderFunc(herder)
+	pdf.AddPage()
+
+	prevFirstLetter := ""
+	fillColor := true
+
+	for _, row := range data {
+		firstLetter := strings.ToUpper(string(row[2][0]))
+		if firstLetter != prevFirstLetter {
+			pdf.SetFillColor(222, 222, 222)
+			pdf.CellFormat(0, 7, firstLetter, "1", 0, "", true, 0, "")
+			pdf.Ln(-1)
+			prevFirstLetter = firstLetter
+		}
+
+		if fillColor {
+			pdf.SetFillColor(243, 243, 243)
+		} else {
+			pdf.SetFillColor(255, 255, 255)
+		}
+		fillColor = !fillColor
+
+		for i, cell := range row {
+			pdf.CellFormat(columnWidth[i], 7, cell, "1", 0, "", true, 0, "")
+		}
+		pdf.Ln(-1)
+	}
+
+	err := pdf.OutputFileAndClose(filename)
+	if err != nil {
+		fmt.Printf("error when close first timer file: %v\n", err)
+		return err
+	}
+
+	return nil
 }
