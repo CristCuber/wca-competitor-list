@@ -73,13 +73,13 @@ func (g *Gen) GenerateNameList() error {
 		return Competition.Persons[i].PersonName < Competition.Persons[j].PersonName
 	})
 
-	registrationDeskFirstTimerFileName := Competition.ID + "-registration-desk-first-timer.pdf"
-	registrationDeskReturnerFileName := Competition.ID + "-registration-desk-returner.pdf"
-	registrationDeskIncorrectFormatFileName := Competition.ID + "-registration-desk-incorrect.pdf"
+	checkInFirstTimerFileName := Competition.ID + "-check-in-first-timer.pdf"
+	checkInReturnerFileName := Competition.ID + "-check-in-returner.pdf"
+	checkInIncorrectFormatFileName := Competition.ID + "-check-in-incorrect.pdf"
 
-	regisFirstTimerArray := [][]string{}
-	regisReturnerArray := [][]string{}
-	regisIncorrectFormatArray := [][]string{}
+	checkInFirstTimerArray := [][]string{}
+	checkInReturnerArray := [][]string{}
+	checkInIncorrectFormatArray := [][]string{}
 
 	for _, person := range Competition.Persons {
 		if person.Registration.Status != "accepted" {
@@ -133,28 +133,28 @@ func (g *Gen) GenerateNameList() error {
 			}
 
 			regisRow := []string{CompIdString, person.WCAID, name, gender, person.ConrtyISO2, "", note}
-			regisIncorrectFormatArray = append(regisIncorrectFormatArray, regisRow)
+			checkInIncorrectFormatArray = append(checkInIncorrectFormatArray, regisRow)
 		} else if person.WCAID == "" {
 			regisRow := []string{CompIdString, "", personNameWithoutLocal[0], gender, person.ConrtyISO2, "", person.Registration.AdminNote}
-			regisFirstTimerArray = append(regisFirstTimerArray, regisRow)
+			checkInFirstTimerArray = append(checkInFirstTimerArray, regisRow)
 		} else {
 			regisRow := []string{CompIdString, person.WCAID, personNameWithoutLocal[0], gender, person.ConrtyISO2, "", ""}
-			regisReturnerArray = append(regisReturnerArray, regisRow)
+			checkInReturnerArray = append(checkInReturnerArray, regisRow)
 		}
 
 	}
 
-	err = printPDF(pdfFirstTimer, columns, columnWidth, regisFirstTimerArray, registrationDeskFirstTimerFileName)
+	err = printPDF(pdfFirstTimer, columns, columnWidth, checkInFirstTimerArray, checkInFirstTimerFileName)
 	if err != nil {
 		fmt.Printf("error print first timer file: %v\n", err)
 		return err
 	}
-	err = printPDF(pdfReturner, columns, columnWidth, regisReturnerArray, registrationDeskReturnerFileName)
+	err = printPDF(pdfReturner, columns, columnWidth, checkInReturnerArray, checkInReturnerFileName)
 	if err != nil {
 		fmt.Printf("error print returner file: %v\n", err)
 		return err
 	}
-	err = printPDF(pdfIncorrect, columns, columnWidth, regisIncorrectFormatArray, registrationDeskIncorrectFormatFileName)
+	err = printPDF(pdfIncorrect, columns, columnWidth, checkInIncorrectFormatArray, checkInIncorrectFormatFileName)
 	if err != nil {
 		fmt.Printf("error print incorrect file: %v\n", err)
 		return err
