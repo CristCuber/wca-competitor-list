@@ -151,12 +151,12 @@ func (g *Gen) GenerateNameList() error {
 	}
 	err = printPDF(pdfReturner, columns, columnWidth, regisReturnerArray, registrationDeskReturnerFileName)
 	if err != nil {
-		fmt.Printf("error print first timer file: %v\n", err)
+		fmt.Printf("error print returner file: %v\n", err)
 		return err
 	}
 	err = printPDF(pdfIncorrect, columns, columnWidth, regisIncorrectFormatArray, registrationDeskIncorrectFormatFileName)
 	if err != nil {
-		fmt.Printf("error print first timer file: %v\n", err)
+		fmt.Printf("error print incorrect file: %v\n", err)
 		return err
 	}
 
