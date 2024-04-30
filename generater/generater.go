@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,9 +74,17 @@ func (g *Gen) GenerateNameList() error {
 		return Competition.Persons[i].PersonName < Competition.Persons[j].PersonName
 	})
 
-	checkInFirstTimerFileName := Competition.ID + "-check-in-first-timer.pdf"
-	checkInReturnerFileName := Competition.ID + "-check-in-returner.pdf"
-	checkInIncorrectFormatFileName := Competition.ID + "-check-in-incorrect.pdf"
+	exePath, err := os.Executable()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return err
+	}
+
+	exeDir := filepath.Dir(exePath)
+
+	checkInFirstTimerFilePath := exeDir + "/" + Competition.ID + "-check-in-first-timer.pdf"
+	checkInReturnerFilePath := exeDir + "/" + Competition.ID + "-check-in-returner.pdf"
+	checkInIncorrectFormatFilePath := exeDir + "/" + Competition.ID + "-check-in-incorrect.pdf"
 
 	checkInFirstTimerArray := [][]string{}
 	checkInReturnerArray := [][]string{}
@@ -144,17 +153,17 @@ func (g *Gen) GenerateNameList() error {
 
 	}
 
-	err = printPDF(pdfFirstTimer, columns, columnWidth, checkInFirstTimerArray, checkInFirstTimerFileName)
+	err = printPDF(pdfFirstTimer, columns, columnWidth, checkInFirstTimerArray, checkInFirstTimerFilePath)
 	if err != nil {
 		fmt.Printf("error print first timer file: %v\n", err)
 		return err
 	}
-	err = printPDF(pdfReturner, columns, columnWidth, checkInReturnerArray, checkInReturnerFileName)
+	err = printPDF(pdfReturner, columns, columnWidth, checkInReturnerArray, checkInReturnerFilePath)
 	if err != nil {
 		fmt.Printf("error print returner file: %v\n", err)
 		return err
 	}
-	err = printPDF(pdfIncorrect, columns, columnWidth, checkInIncorrectFormatArray, checkInIncorrectFormatFileName)
+	err = printPDF(pdfIncorrect, columns, columnWidth, checkInIncorrectFormatArray, checkInIncorrectFormatFilePath)
 	if err != nil {
 		fmt.Printf("error print incorrect file: %v\n", err)
 		return err
