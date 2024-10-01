@@ -110,27 +110,29 @@ func (g *Gen) GenerateNameList() error {
 
 		note := ""
 
-		if len(personNameWithoutLocalArray) != 2 {
-			note = "No surname"
-			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No surname")
-			hasSurname = false
-			isIncorrectName = true
-		} else if strings.Contains(personNameWithoutLocalArray[1], "(") {
-			note = "No space"
-			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No space between English and local")
-			isIncorrectName = true
-		} else if strings.Contains(person.PersonName, "  ") {
-			note = "Have double space"
-			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". There are double space in their name")
-			isIncorrectName = true
-		} else if !validateCapitalization(personNameWithoutLocal[0]) {
-			note = "Incorrect format"
-			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". Name is not in correct format")
-			isIncorrectName = true
-		} else if isLetter(person.PersonName) {
-			note = "No English"
-			fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No English name")
-			isIncorrectName = true
+		if person.WCAID == "" {
+			if len(personNameWithoutLocalArray) != 2 {
+				note = "No surname"
+				fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No surname")
+				hasSurname = false
+				isIncorrectName = true
+			} else if strings.Contains(personNameWithoutLocalArray[1], "(") {
+				note = "No space"
+				fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No space between English and local")
+				isIncorrectName = true
+			} else if strings.Contains(person.PersonName, "  ") {
+				note = "Have double space"
+				fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". There are double space in their name")
+				isIncorrectName = true
+			} else if !validateCapitalization(personNameWithoutLocal[0]) {
+				note = "Incorrect format"
+				fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". Name is not in correct format")
+				isIncorrectName = true
+			} else if isLetter(person.PersonName) {
+				note = "No English"
+				fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No English name")
+				isIncorrectName = true
+			}
 		}
 
 		CompIdString := strconv.Itoa(person.RegistrationID)
