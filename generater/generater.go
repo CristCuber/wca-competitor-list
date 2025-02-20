@@ -2,6 +2,7 @@ package generater
 
 import (
 	"bufio"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,12 @@ import (
 
 	"github.com/jung-kurt/gofpdf"
 )
+
+//go:embed fonts/NotoSans-Regular.ttf
+var notoSans []byte
+
+//go:embed fonts/NotoSans-Bold.ttf
+var notoSansB []byte
 
 type Gen struct{}
 
@@ -82,9 +89,13 @@ func (g *Gen) GenerateNameList() error {
 
 	exeDir := filepath.Dir(exePath)
 
-	checkInFirstTimerFilePath := exeDir + "/" + Competition.ID + "-check-in-first-timer.pdf"
-	checkInReturnerFilePath := exeDir + "/" + Competition.ID + "-check-in-returner.pdf"
-	checkInIncorrectFormatFilePath := exeDir + "/" + Competition.ID + "-check-in-incorrect.pdf"
+	checkInFirstTimerFileName := Competition.ID + "-check-in-first-timer.pdf"
+	checkInReturnerFileName := Competition.ID + "-check-in-returner.pdf"
+	checkInIncorrectFormatFileName := Competition.ID + "-check-in-incorrect.pdf"
+
+	checkInFirstTimerFilePath := exeDir + "/" + checkInFirstTimerFileName
+	checkInReturnerFilePath := exeDir + "/" + checkInReturnerFileName
+	checkInIncorrectFormatFilePath := exeDir + "/" + checkInIncorrectFormatFileName
 
 	checkInFirstTimerArray := [][]string{}
 	checkInReturnerArray := [][]string{}
@@ -155,17 +166,17 @@ func (g *Gen) GenerateNameList() error {
 
 	}
 
-	err = printPDF(pdfFirstTimer, columns, columnWidth, checkInFirstTimerArray, checkInFirstTimerFilePath)
+	err = printPDF(pdfFirstTimer, columns, columnWidth, checkInFirstTimerArray, checkInFirstTimerFileName, checkInFirstTimerFilePath)
 	if err != nil {
 		fmt.Printf("error print first timer file: %v\n", err)
 		return err
 	}
-	err = printPDF(pdfReturner, columns, columnWidth, checkInReturnerArray, checkInReturnerFilePath)
+	err = printPDF(pdfReturner, columns, columnWidth, checkInReturnerArray, checkInReturnerFileName, checkInReturnerFilePath)
 	if err != nil {
 		fmt.Printf("error print returner file: %v\n", err)
 		return err
 	}
-	err = printPDF(pdfIncorrect, columns, columnWidth, checkInIncorrectFormatArray, checkInIncorrectFormatFilePath)
+	err = printPDF(pdfIncorrect, columns, columnWidth, checkInIncorrectFormatArray, checkInIncorrectFormatFileName, checkInIncorrectFormatFilePath)
 	if err != nil {
 		fmt.Printf("error print incorrect file: %v\n", err)
 		return err
@@ -193,14 +204,17 @@ func isLetter(s string) bool {
 	return true
 }
 
-func printPDF(pdf *gofpdf.Fpdf, columns []string, columnWidth []float64, data [][]string, filename string) error {
+func printPDF(pdf *gofpdf.Fpdf, columns []string, columnWidth []float64, data [][]string, filename string, filePath string) error {
+	pdf.AddUTF8FontFromBytes("NotoSans", "", notoSans)
+	pdf.AddUTF8FontFromBytes("NotoSans", "B", notoSansB)
+
 	herder := func() {
 		pdf.SetY(10)
-		pdf.SetFont("Arial", "", 7)
+		pdf.SetFont("NotoSans", "", 7)
 		pdf.Cell(0, 10, filename)
 		pdf.Ln(12)
 
-		pdf.SetFont("Arial", "B", 10)
+		pdf.SetFont("NotoSans", "B", 10)
 		pdf.SetFillColor(189, 189, 189)
 		for i, colText := range columns {
 			pdf.CellFormat(columnWidth[i], 10, colText, "1", 0, "C", true, 0, "")
@@ -221,6 +235,7 @@ func printPDF(pdf *gofpdf.Fpdf, columns []string, columnWidth []float64, data []
 	fillColor := true
 
 	for _, row := range data {
+		pdf.SetFont("NotoSans", "", 9)
 		firstLetter := strings.ToUpper(string(row[2][0]))
 		if firstLetter != prevFirstLetter {
 			pdf.SetFillColor(222, 222, 222)
@@ -242,7 +257,7 @@ func printPDF(pdf *gofpdf.Fpdf, columns []string, columnWidth []float64, data []
 		pdf.Ln(-1)
 	}
 
-	err := pdf.OutputFileAndClose(filename)
+	err := pdf.OutputFileAndClose(filePath)
 	if err != nil {
 		fmt.Printf("error when close first timer file: %v\n", err)
 		return err
