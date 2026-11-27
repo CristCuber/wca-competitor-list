@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Result}}{{.Result.CompetitionID}} · {{end}}WCA Competitor List</title>
+<script>
+  // Set the theme before the page is drawn so it does not flash: the saved
+  // choice, or the system's setting the first time.
+  (function () {
+    var t = localStorage.getItem("theme");
+    if (t !== "light" && t !== "dark") {
+      t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f5f6f8; --card: #fff; --text: #1d2330; --muted: #667085;
+    --line: #e3e6eb; --accent: #1f6feb; --accent-dark: #1858c4; --ghost-hover: #eef4ff;
+    --warn-bg: #fff7e6; --warn-line: #f5c26b; --warn-head: #fbe7c2; --problem: #b42318;
+    --err-bg: #fdecec; --err-line: #f19999;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0f1218; --card: #181c24; --text: #e6e9ef; --muted: #98a2b3;
+    --line: #2b313c; --accent: #4c8dff; --accent-dark: #3a76e0; --ghost-hover: #1c2a44;
+    --warn-bg: #2a2212; --warn-line: #7a5a1c; --warn-head: #3a2e14; --problem: #ff8a80;
+    --err-bg: #2c1618; --err-line: #7d3236;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 20px 48px; }
+  .theme { position: absolute; top: 16px; right: 20px; display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
+  .theme button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; background: transparent; color: var(--muted); border-radius: 999px; cursor: pointer; }
+  .theme svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .theme button:hover { color: var(--text); }
+  .theme button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  @media (max-width: 600px) { main { padding-top: 64px; } }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  form { display: flex; gap: 8px; flex-wrap: wrap; }
+  input[type=text] { flex: 1 1 280px; padding: 10px 12px; font-size: 15px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); }
+  input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; font: 600 14px system-ui, sans-serif; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; text-decoration: none; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--accent-dark); }
+  .btn.ghost { background: transparent; color: var(--accent); }
+  .btn.ghost:hover { background: var(--ghost-hover); }
+  .btn[disabled] { opacity: .6; cursor: progress; }
+  .box { margin-top: 20px; padding: 12px 16px; border-radius: 8px; border: 1px solid; }
+  .error { background: var(--err-bg); border-color: var(--err-line); }
+  .warn { background: var(--warn-bg); border-color: var(--warn-line); }
+  .issues h3 { margin: 0 0 4px; font-size: 16px; }
+  .issues p { margin: 0 0 12px; }
+  .issues a { color: var(--accent); font-weight: 600; }
+  .issues table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 6px; overflow: hidden; font-size: 14px; }
+  .issues th, .issues td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .issues th { background: var(--warn-head); font-weight: 600; }
+  .issues tr:last-child td { border-bottom: 0; }
+  .issues .wcaname { font-weight: 600; white-space: pre-wrap; }
+  .issues .problem { color: var(--problem); font-weight: 600; }
+  .files-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 28px 0 12px; }
+  h2 { font-size: 18px; margin: 0; }
+  .btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .files { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .file { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .file.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .file .label { font-weight: 600; }
+  .file .count { font-size: 28px; font-weight: 700; line-height: 1; }
+  .file .name { color: var(--muted); font-size: 12px; word-break: break-all; }
+  .file .actions { display: flex; gap: 8px; margin-top: auto; }
+  .preview { margin-top: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .preview header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .preview header strong { word-break: break-all; }
+  .preview iframe { display: block; width: 100%; height: 80vh; border: 0; background: #525659; }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<div class="theme" role="group" aria-label="Color theme">
+  <button type="button" data-set-theme="light" aria-label="Bright mode" title="Bright mode">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+  </button>
+  <button type="button" data-set-theme="dark" aria-label="Dark mode" title="Dark mode">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div>
+<main>
+  <h1>WCA Competitor List</h1>
+  <p class="sub">Enter a competition ID to build its check-in lists, preview them, then download the PDFs.</p>
+
+  <form method="get" action="/" id="search">
+    <input type="text" name="id" value="{{.ID}}" placeholder="e.g. AyutthayaCubeOpen2026" aria-label="Competition ID" required autofocus>
+    <input type="hidden" name="refresh" value="1">
+    <button class="btn" type="submit">Load competition</button>
+  </form>
+  <p class="hint">The ID is the last part of the competition's WCA page URL.</p>
+
+  {{if .Err}}<div class="box error"><strong>Could not load the competition.</strong> {{.Err}}</div>{{end}}
+
+  {{with .Result}}
+    {{if .NameIssues}}
+    <section class="box warn issues">
+      <h3>{{len .NameIssues}} first-timer name(s) must be fixed on the WCA website first</h3>
+      <p>These competitors are <strong>not in the check-in files</strong>. Fix their names on the WCA website
+        (the competitor can edit it in their WCA profile, or ask a WCA Delegate), then press <strong>Load competition</strong> again.
+        <a href="{{.CompetitionURL}}" target="_blank" rel="noopener">Open the competition on WCA ↗</a></p>
+      <table>
+        <thead><tr><th>ID</th><th>Name on WCA</th><th>What is wrong</th><th>How to fix</th></tr></thead>
+        <tbody>
+          {{range .NameIssues}}
+          <tr><td>{{.RegistrantID}}</td><td class="wcaname">{{.Name}}</td><td class="problem">{{.Problem}}</td><td>{{.Fix}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+    {{end}}
+
+    <div class="files-head">
+      <h2>{{.CompetitionID}}</h2>
+      <a class="btn" href="/zip?id={{$.ID}}" download="{{.CompetitionID}}-check-in.zip" title="Both PDFs in one zip file">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+        Download both (.zip)
+      </a>
+    </div>
+    <div class="files">
+      {{range .Files}}
+      <div class="file{{if eq .Key $.Current.Key}} current{{end}}">
+        <div class="label">{{.Label}}</div>
+        <div class="count">{{len .Rows}} <span style="font-size:14px;font-weight:400;color:var(--muted)">competitors</span></div>
+        <div class="name">{{.Name}}</div>
+        <div class="actions">
+          <a class="btn ghost" href="/?id={{$.ID}}&file={{.Key}}#preview">Preview</a>
+          <a class="btn"href="/pdf?id={{$.ID}}&file={{.Key}}&download=1" download="{{.Name}}">Download</a>
+        </div>
+      </div>
+      {{end}}
+    </div>
+
+    <section class="preview" id="preview">
+      <header>
+        <span>Preview: <strong>{{$.Current.Name}}</strong></span>
+        <a class="btn" href="/pdf?id={{$.ID}}&file={{$.Current.Key}}&download=1" download="{{$.Current.Name}}">Download this PDF</a>
+      </header>
+      <iframe src="/pdf?id={{$.ID}}&file={{$.Current.Key}}" title="Preview of {{$.Current.Name}}"></iframe>
+    </section>
+  {{end}}
+</main>
+<script>
+  document.getElementById("search").addEventListener("submit", function () {
+    var b = this.querySelector("button");
+    b.disabled = true;
+    b.textContent = "Loading…";
+  });
+  window.addEventListener("pageshow", function () {
+    var b = document.querySelector("#search button");
+    b.disabled = false;
+    b.textContent = "Load competition";
+  });
+
+  var themeButtons =document.querySelectorAll("[data-set-theme]");
+  function showTheme() {
+    themeButtons.forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.setTheme === document.documentElement.dataset.theme));
+    });
+  }
+  themeButtons.forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.documentElement.dataset.theme = b.dataset.setTheme;
+      localStorage.setItem("theme", b.dataset.setTheme);
+      showTheme();
+    });
+  });
+  showTheme();
+</script>
+</body>
+</html>
