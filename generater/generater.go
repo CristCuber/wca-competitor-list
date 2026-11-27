@@ -4,15 +4,20 @@ import (
 	"bufio"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/jung-kurt/gofpdf"
 )
@@ -21,247 +26,372 @@ import (
 var notoSans []byte
 
 //go:embed fonts/NotoSans-Bold.ttf
-var notoSansB []byte
+var notoSansBold []byte
 
-type Gen struct{}
+const (
+	wcifURL = "https://www.worldcubeassociation.org/api/v0/competitions/%s/wcif/public"
+	font    = "NotoSans"
+)
 
-type IGenerater interface {
-	GenerateNameList()
+var (
+	Columns     = []string{"ID", "WCA ID", "Name", "Gender", "Country", "Sign", "Remark"}
+	columnWidth = []float64{10, 25, 65, 15, 15, 15, 45}
+)
+
+const nameCol, remarkCol = 2, 6
+
+// File is one check-in PDF: its rows and the name it is saved under.
+type File struct {
+	Key   string // used in URLs, e.g. "first-timer"
+	Label string // shown to people, e.g. "First-timer"
+	Name  string // e.g. "MyComp2026-check-in-first-timer.pdf"
+	Rows  [][]string
+}
+
+// NameIssue is a first-timer whose name is not in the WCA format. They are
+// left out of the check-in files until the name is fixed on the WCA website.
+type NameIssue struct {
+	RegistrantID int
+	Name         string
+	Problem      string
+	Fix          string
+}
+
+// Result holds the check-in files of a competition and the first-timers
+// whose name has to be fixed first.
+type Result struct {
+	CompetitionID string
+	Files         []File
+	NameIssues    []NameIssue
+}
+
+// CompetitionURL is the competition's page on the WCA website.
+func (r *Result) CompetitionURL() string {
+	return "https://www.worldcubeassociation.org/competitions/" + url.PathEscape(r.CompetitionID)
+}
+
+// File returns the file with the given key.
+func (r *Result) File(key string) (File, bool) {
+	for _, f := range r.Files {
+		if f.Key == key {
+			return f, true
+		}
+	}
+	return File{}, false
+}
+
+type Gen struct {
+	client  *http.Client
+	wcifURL string // with %s for the competition id
 }
 
 func NewGenerater() *Gen {
-	return &Gen{}
+	return &Gen{client: &http.Client{Timeout: 30 * time.Second}, wcifURL: wcifURL}
 }
 
+// Generate downloads the public WCIF of a competition and builds its check-in files.
+func (g *Gen) Generate(id string) (*Result, error) {
+	comp, err := g.fetchCompetition(id)
+	if err != nil {
+		return nil, err
+	}
+	return build(comp), nil
+}
+
+// GenerateNameList asks for a competition id on the terminal and writes the
+// check-in PDFs next to the executable.
 func (g *Gen) GenerateNameList() error {
-	fontSize := 9.0
-	columns := []string{"ID", "WCA ID", "Name", "Gender", "Country", "Sign", "Remark"}
-	columnWidth := []float64{10.0, 25.0, 65.0, 15.0, 15.0, 15.0, 45.0}
-
-	pdfFirstTimer := gofpdf.New("P", "mm", "A4", "")
-	pdfFirstTimer.SetFont("Arial", "", fontSize)
-
-	pdfReturner := gofpdf.New("P", "mm", "A4", "")
-	pdfReturner.SetFont("Arial", "", fontSize)
-
-	pdfIncorrect := gofpdf.New("P", "mm", "A4", "")
-	pdfIncorrect.SetFont("Arial", "", fontSize)
-
-	defaultSurname := "XXXXXXXXXX"
-	wcifURL := "https://www.worldcubeassociation.org/api/v0/competitions/{competitionID}/wcif/public"
-
-	scanner := bufio.NewScanner(os.Stdin)
-
-	fmt.Printf("Enter competition id:")
-	scanner.Scan()
-	input := scanner.Text()
-
-	thisCompURL := strings.Replace(wcifURL, "{competitionID}", input, -1)
-
-	resp, err := http.Get(thisCompURL)
+	id, err := readCompetitionID(os.Stdin)
 	if err != nil {
-		fmt.Printf("error when call wcif: %v\n", err)
 		return err
 	}
-	defer resp.Body.Close()
-
-	wcifByte, err := io.ReadAll(resp.Body)
+	res, err := g.Generate(id)
 	if err != nil {
-		fmt.Printf("error when read body: %v\n", err)
 		return err
 	}
-
-	var Competition WCACompetition
-
-	json.Unmarshal(wcifByte, &Competition)
-
-	fmt.Println("this competition is " + Competition.ID)
-
-	sort.Slice(Competition.Persons, func(i, j int) bool {
-		return Competition.Persons[i].PersonName < Competition.Persons[j].PersonName
-	})
+	fmt.Println("this competition is " + res.CompetitionID)
+	for _, n := range res.NameIssues {
+		fmt.Printf("++++++++ [error] competitor %d has wrong name: %s. %s (%s)\n", n.RegistrantID, n.Name, n.Problem, n.Fix)
+	}
+	if len(res.NameIssues) > 0 {
+		fmt.Println("These competitors are left out of the files: fix their names on the WCA website and run again.")
+	}
 
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Println("Error:", err)
-		return err
+		return fmt.Errorf("find executable folder: %w", err)
+	}
+	for _, f := range res.Files {
+		if err := writePDFFile(filepath.Join(filepath.Dir(exePath), f.Name), f); err != nil {
+			return fmt.Errorf("write %s: %w", f.Name, err)
+		}
+	}
+	return nil
+}
+
+func readCompetitionID(r io.Reader) (string, error) {
+	fmt.Print("Enter competition id: ")
+	sc := bufio.NewScanner(r)
+	if !sc.Scan() {
+		if err := sc.Err(); err != nil {
+			return "", fmt.Errorf("read competition id: %w", err)
+		}
+	}
+	id := strings.TrimSpace(sc.Text())
+	if id == "" {
+		return "", errors.New("no competition id entered")
+	}
+	return id, nil
+}
+
+func (g *Gen) fetchCompetition(id string) (*Competition, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, errors.New("no competition id entered")
+	}
+	resp, err := g.client.Get(fmt.Sprintf(g.wcifURL, url.PathEscape(id)))
+	if err != nil {
+		return nil, fmt.Errorf("call wcif: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("cannot get wcif of %q (HTTP %d): check the competition id", id, resp.StatusCode)
 	}
 
-	exeDir := filepath.Dir(exePath)
+	var comp Competition
+	if err := json.NewDecoder(resp.Body).Decode(&comp); err != nil {
+		return nil, fmt.Errorf("parse wcif: %w", err)
+	}
+	if comp.ID == "" {
+		return nil, fmt.Errorf("wcif of %q has no competition id", id)
+	}
+	return &comp, nil
+}
 
-	checkInFirstTimerFileName := Competition.ID + "-check-in-first-timer.pdf"
-	checkInReturnerFileName := Competition.ID + "-check-in-returner.pdf"
-	checkInIncorrectFormatFileName := Competition.ID + "-check-in-incorrect.pdf"
+// build sorts the accepted competitors by name and puts each one in one of
+// the three check-in lists. Only first-timers' names are validated.
+func build(comp *Competition) *Result {
+	persons := comp.Persons
+	sort.SliceStable(persons, func(i, j int) bool {
+		return strings.ToLower(persons[i].Name) < strings.ToLower(persons[j].Name)
+	})
 
-	checkInFirstTimerFilePath := exeDir + "/" + checkInFirstTimerFileName
-	checkInReturnerFilePath := exeDir + "/" + checkInReturnerFileName
-	checkInIncorrectFormatFilePath := exeDir + "/" + checkInIncorrectFormatFileName
-
-	checkInFirstTimerArray := [][]string{}
-	checkInReturnerArray := [][]string{}
-	checkInIncorrectFormatArray := [][]string{}
-
-	for _, person := range Competition.Persons {
-		if person.Registration.Status != "accepted" {
+	var firstTimers, returners [][]string
+	var issues []NameIssue
+	for _, p := range persons {
+		if p.Registration.Status != "accepted" {
 			continue
 		}
+		row := []string{strconv.Itoa(p.RegistrantID), p.WCAID, englishName(p.Name), genderLabel(p.Gender), p.CountryISO2, "", ""}
 
-		hasSurname := true
-		isIncorrectName := false
-		gender := "other"
-
-		personNameWithoutLocal := strings.Split(person.PersonName, " (")
-		personNameWithoutLocalArray := strings.SplitN(personNameWithoutLocal[0], " ", 2)
-
-		if person.Gender == "m" {
-			gender = "Male"
-		} else if person.Gender == "f" {
-			gender = "Female"
+		if p.WCAID != "" {
+			returners = append(returners, row)
+			continue
 		}
-
-		note := ""
-
-		if person.WCAID == "" {
-			if len(personNameWithoutLocalArray) != 2 {
-				note = "No surname"
-				fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No surname")
-				hasSurname = false
-				isIncorrectName = true
-			} else if strings.Contains(personNameWithoutLocalArray[1], "(") {
-				note = "No space"
-				fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No space between English and local")
-				isIncorrectName = true
-			} else if strings.Contains(person.PersonName, "  ") {
-				note = "Have double space"
-				fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". There are double space in their name")
-				isIncorrectName = true
-			} else if !validateCapitalization(personNameWithoutLocal[0]) {
-				note = "Incorrect format"
-				fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". Name is not in correct format")
-				isIncorrectName = true
-			} else if isLetter(person.PersonName) {
-				note = "No English"
-				fmt.Println("++++++++ [error] competitor has wrong name: " + person.PersonName + ". No English name")
-				isIncorrectName = true
-			}
+		if issue := checkName(p.Name); issue != nil {
+			issues = append(issues, NameIssue{RegistrantID: p.RegistrantID, Name: p.Name, Problem: issue.problem, Fix: issue.fix})
+			continue
 		}
-
-		CompIdString := strconv.Itoa(person.RegistrationID)
-
-		if isIncorrectName {
-			name := personNameWithoutLocal[0]
-			if !hasSurname {
-				name = name + defaultSurname
-			}
-
-			regisRow := []string{CompIdString, person.WCAID, name, gender, person.ConrtyISO2, "", note}
-			checkInIncorrectFormatArray = append(checkInIncorrectFormatArray, regisRow)
-		} else if person.WCAID == "" {
-			regisRow := []string{CompIdString, "", personNameWithoutLocal[0], gender, person.ConrtyISO2, "", person.Registration.AdminNote}
-			checkInFirstTimerArray = append(checkInFirstTimerArray, regisRow)
-		} else {
-			regisRow := []string{CompIdString, person.WCAID, personNameWithoutLocal[0], gender, person.ConrtyISO2, "", ""}
-			checkInReturnerArray = append(checkInReturnerArray, regisRow)
-		}
-
+		row[remarkCol] = p.Registration.AdminNote
+		firstTimers = append(firstTimers, row)
 	}
 
-	err = printPDF(pdfFirstTimer, columns, columnWidth, checkInFirstTimerArray, checkInFirstTimerFileName, checkInFirstTimerFilePath)
-	if err != nil {
-		fmt.Printf("error print first timer file: %v\n", err)
-		return err
+	file := func(key, label string, rows [][]string) File {
+		return File{Key: key, Label: label, Name: comp.ID + "-check-in-" + key + ".pdf", Rows: rows}
 	}
-	err = printPDF(pdfReturner, columns, columnWidth, checkInReturnerArray, checkInReturnerFileName, checkInReturnerFilePath)
-	if err != nil {
-		fmt.Printf("error print returner file: %v\n", err)
-		return err
+	return &Result{
+		CompetitionID: comp.ID,
+		Files: []File{
+			file("first-timer", "First-timer", firstTimers),
+			file("returner", "Returner", returners),
+		},
+		NameIssues: issues,
 	}
-	err = printPDF(pdfIncorrect, columns, columnWidth, checkInIncorrectFormatArray, checkInIncorrectFormatFileName, checkInIncorrectFormatFilePath)
-	if err != nil {
-		fmt.Printf("error print incorrect file: %v\n", err)
-		return err
-	}
+}
 
+func genderLabel(g string) string {
+	switch g {
+	case "m":
+		return "Male"
+	case "f":
+		return "Female"
+	}
+	return "Other"
+}
+
+// englishName drops the local name: "Somchai Jaidee (สมชาย ใจดี)" -> "Somchai Jaidee".
+func englishName(name string) string {
+	english, _, _ := strings.Cut(name, " (")
+	return strings.TrimSpace(english)
+}
+
+type nameIssue struct {
+	problem string
+	fix     string
+}
+
+var (
+	issueNoSpace     = nameIssue{"No space between English and local name", "Put a space before the local name in brackets, e.g. Somchai Jaidee (สมชาย ใจดี)"}
+	issueNoSurname   = nameIssue{"No surname", "Add the surname after the first name"}
+	issueDoubleSpace = nameIssue{"Double space in the name", "Remove the extra space"}
+	issueNoEnglish   = nameIssue{"No English name", "Write the name in English letters, with the local name in brackets after it"}
+	issueFormat      = nameIssue{"Incorrect capitalization", "Start every word of the name with a capital letter, e.g. Somchai Jaidee"}
+)
+
+// checkName returns what is wrong with a WCA name, or nil if it is fine.
+func checkName(name string) *nameIssue {
+	english := englishName(name)
+	switch {
+	case strings.Contains(english, "("):
+		return &issueNoSpace
+	case !strings.Contains(english, " "):
+		return &issueNoSurname
+	case strings.Contains(name, "  "):
+		return &issueDoubleSpace
+	case !isLatin(english):
+		return &issueNoEnglish
+	case !isCapitalized(english):
+		return &issueFormat
+	}
 	return nil
 }
 
-func validateCapitalization(fullname string) bool {
-	words := strings.Fields(fullname)
-	for _, word := range words {
-		if !unicode.IsUpper(rune(word[0])) {
-			return false
-		}
-	}
-	return true
-}
-
-func isLetter(s string) bool {
+// isLatin reports whether s has letters and all of them are Latin
+// (accents such as Vietnamese ones included).
+func isLatin(s string) bool {
+	hasLetter := false
 	for _, r := range s {
-		if !unicode.IsLetter(r) {
+		if unicode.IsLetter(r) {
+			if !unicode.Is(unicode.Latin, r) {
+				return false
+			}
+			hasLetter = true
+		}
+	}
+	return hasLetter
+}
+
+// isCapitalized reports whether every word starts with an upper-case letter.
+func isCapitalized(s string) bool {
+	for _, word := range strings.Fields(s) {
+		if r, _ := utf8.DecodeRuneInString(word); !unicode.IsUpper(r) {
 			return false
 		}
 	}
 	return true
 }
 
-func printPDF(pdf *gofpdf.Fpdf, columns []string, columnWidth []float64, data [][]string, filename string, filePath string) error {
-	pdf.AddUTF8FontFromBytes("NotoSans", "", notoSans)
-	pdf.AddUTF8FontFromBytes("NotoSans", "B", notoSansB)
+func firstLetter(s string) string {
+	r, size := utf8.DecodeRuneInString(s)
+	if size == 0 {
+		return ""
+	}
+	return string(unicode.ToUpper(r))
+}
 
-	herder := func() {
+func writePDFFile(path string, f File) error {
+	out, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	if err := WritePDF(out, f); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+// WritePDF renders a check-in file as an A4 PDF.
+func WritePDF(w io.Writer, f File) error {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddUTF8FontFromBytes(font, "", notoSans)
+	pdf.AddUTF8FontFromBytes(font, "B", notoSansBold)
+
+	pdf.SetHeaderFunc(func() {
 		pdf.SetY(10)
-		pdf.SetFont("NotoSans", "", 7)
-		pdf.Cell(0, 10, filename)
+		pdf.SetFont(font, "", 7)
+		pdf.Cell(0, 10, f.Name)
 		pdf.Ln(12)
 
-		pdf.SetFont("NotoSans", "B", 10)
+		pdf.SetFont(font, "B", 10)
 		pdf.SetFillColor(189, 189, 189)
-		for i, colText := range columns {
-			pdf.CellFormat(columnWidth[i], 10, colText, "1", 0, "C", true, 0, "")
+		for i, col := range Columns {
+			pdf.CellFormat(columnWidth[i], 10, col, "1", 0, "C", true, 0, "")
 		}
 		pdf.Ln(-1)
-	}
-
-	footer := func() {
+	})
+	pdf.SetFooterFunc(func() {
 		pdf.SetY(-15)
+		pdf.SetFont(font, "", 9)
 		pdf.CellFormat(0, 10, "Page "+strconv.Itoa(pdf.PageNo()), "", 0, "R", false, 0, "")
-	}
-
-	pdf.SetHeaderFunc(herder)
+	})
 	pdf.AddPage()
-	pdf.SetFooterFunc(footer)
 
-	prevFirstLetter := ""
-	fillColor := true
+	const rowHeight = 7
+	_, pageHeight := pdf.GetPageSize()
+	_, bottomMargin := pdf.GetAutoPageBreak()
+	perPage := int(math.Floor((pageHeight - bottomMargin - pdf.GetY()) / rowHeight))
 
-	for _, row := range data {
-		pdf.SetFont("NotoSans", "", 9)
-		firstLetter := strings.ToUpper(string(row[2][0]))
-		if firstLetter != prevFirstLetter {
-			pdf.SetFillColor(222, 222, 222)
-			pdf.CellFormat(0, 7, firstLetter, "1", 0, "", true, 0, "")
+	pdf.SetFont(font, "", 9)
+	nameRow := 0
+	for p, page := range pageLines(f.Rows, perPage) {
+		if p > 0 {
+			pdf.AddPage()
+		}
+		for _, l := range page {
+			if l.row == nil {
+				pdf.SetFillColor(222, 222, 222)
+				pdf.CellFormat(0, rowHeight, l.letter, "1", 0, "", true, 0, "")
+				pdf.Ln(-1)
+				continue
+			}
+			if nameRow%2 == 0 {
+				pdf.SetFillColor(243, 243, 243)
+			} else {
+				pdf.SetFillColor(255, 255, 255)
+			}
+			nameRow++
+			for j, cell := range l.row {
+				pdf.CellFormat(columnWidth[j], rowHeight, cell, "1", 0, "", true, 0, "")
+			}
 			pdf.Ln(-1)
-			prevFirstLetter = firstLetter
 		}
-
-		if fillColor {
-			pdf.SetFillColor(243, 243, 243)
-		} else {
-			pdf.SetFillColor(255, 255, 255)
-		}
-		fillColor = !fillColor
-
-		for i, cell := range row {
-			pdf.CellFormat(columnWidth[i], 7, cell, "1", 0, "", true, 0, "")
-		}
-		pdf.Ln(-1)
 	}
 
-	err := pdf.OutputFileAndClose(filePath)
-	if err != nil {
-		fmt.Printf("error when close first timer file: %v\n", err)
-		return err
-	}
+	return pdf.Output(w)
+}
 
-	return nil
+// line is one row of a PDF page: a competitor, or (row == nil) the row
+// with the first letter of the names below it.
+type line struct {
+	letter string
+	row    []string
+}
+
+// pageLines splits the competitors into pages of at most perPage lines.
+// A letter line comes before the first name of every letter and again at
+// the top of a page when the names of that letter go on from the page
+// before; a letter line is never left alone at the bottom of a page.
+func pageLines(rows [][]string, perPage int) [][]line {
+	pages := [][]line{nil}
+	prevLetter := ""
+	for _, row := range rows {
+		letter := firstLetter(row[nameCol])
+		showLetter := letter != prevLetter
+		need := 1
+		if showLetter {
+			need++
+		}
+		if cur := pages[len(pages)-1]; len(cur) > 0 && len(cur)+need > perPage {
+			pages = append(pages, nil)
+			showLetter = true
+		}
+		last := len(pages) - 1
+		if showLetter {
+			pages[last] = append(pages[last], line{letter: letter})
+			prevLetter = letter
+		}
+		pages[last] = append(pages[last], line{letter: letter, row: row})
+	}
+	return pages
 }
